@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <title>EFT Version Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+
+        .token-warning {
+            background: #ffecb3;
+            color: #6b4d00;
+            padding: 15px;
+            margin: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .token-warning small {
+            opacity: 0.8;
+            font-size: 0.9em;
+        }
+
+        .downgrade-section {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #333;
+            border-radius: 8px;
+        }
+
+        .downgrade-section button {
+            width: 100%;
+            margin-bottom: 15 px;
+        }
+
+        .compatibility-status {
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .compatible {
+            background-color: #4CAF5050;
+            border: 1px solid #4CAF50;
+            color: #4CAF50;
+        }
+
+        .outdated {
+            background-color: #ff444450;
+            border: 1px solid #ff4444;
+            color: #ff4444;
+        }
+
+        .mirror-link {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #404040;
+            border-radius: 4px;
+        }
+
+        .version-info {
+            margin-top: 8px;
+            font-size: 0.9em;
+            color: #888;
+        }
+
+        .warning {
+            color: #ff4444;
+            padding: 10px;
+            border: 1px solid #ff4444;
+            border-radius: 4px;
+            margin: 10px 0;
+            background-color: #2d2d2d;
+        }
+
+        #retryButton {
+            margin-top: 10px;
+            background-color: #ff4444;
+        }
+
+        #retryButton:hover {
+            background-color: #cc0000;
+        }
+
+        .container {
+            background-color: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .select-group {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+        }
+
+        select {
+            padding: 8px;
+            font-size: 16px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 4px;
+            flex: 1;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #results,
+        #clientSection {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #333;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .update-step,
+        .client-info {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #404040;
+            border-radius: 4px;
+        }
+
+        .download-link {
+            color: #4CAF50;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .hash-display {
+            color: #888;
+            font-family: monospace;
+            font-size: 0.9em;
+            margin: 5px 0;
+            padding: 5px;
+            background-color: #2d2d2d;
+            border-radius: 3px;
+            word-break: break-all;
+        }
+
+        .warning {
+            color: #ffa500;
+            margin-top: 5px;
+        }
+
+        .size-info {
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        h2 {
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>EFT Version Manager</h1>
+
+        <div class="select-group">
+            <div style="flex: 1;">
+                <label for="baseVersion">Current Version:</label>
+                <select id="baseVersion"></select>
+            </div>
+            <div style="flex: 1;">
+                <label for="targetVersion">Target Version:</label>
+                <select id="targetVersion"></select>
+            </div>
+        </div>
+        <button onclick="calculateUpdatePath()">Show Required Updates</button>
+        <div id="results"></div>
+
+        <div class="client-section" id="clientSection">
+            <h2>Full Client Installation</h2>
+            <div id="clientInfo"></div>
+        </div>
+        <div class="downgrade-section">
+            <h2>Version Downgrader</h2>
+            <button onclick="checkDowngraderCompatibility()">Check Downgrader Status</button>
+            <div id="downgradeResults"></div>
+        </div>
+    </div>
+
+    <script>
+        let allUpdates = [];
+        let clientData = null;
+        let cdnBaseUrl = 'http://cdn-11.eft-store.com';
+
+        async function safeFetch(url) {
+            try {
+                const response = await fetch(url);
+                const contentType = response.headers.get('content-type');
+
+                if (!response.ok) {
+                    if (contentType?.includes('application/json')) {
+                        const errorData = await response.json();
+                        return { error: errorData.errmsg || `HTTP Error ${response.status}` };
+                    }
+                    return { error: await response.text() };
+                }
+
+                if (!contentType?.includes('application/json')) {
+                    return { error: 'Invalid response format' };
+                }
+
+                return await response.json();
+            } catch (error) {
+                return { error: error.message };
+            }
+        }
+
+        async function initialize() {
+            try {
+                clearMessages();
+
+                const config = await fetch('/configuration').then(r => r.json());
+                if (config.isStale) {
+                    showTokenWarning(config.errmsg);
+                }
+                if (config.err || !config.data?.channels?.instances) {
+                    throw new Error(config.errmsg || 'Invalid configuration response');
+                }
+
+                const [updates, client] = await Promise.all([
+                    safeFetch('/game-updates'),
+                    safeFetch('/game-installation')
+                ]);
+
+                if (updates.error) throw new Error(updates.error);
+                if (updates.err || !Array.isArray(updates.data)) {
+                    throw new Error(updates.errmsg || 'Invalid updates');
+                }
+
+                if (client.error) throw new Error(client.error);
+                if (client.err || !client.data?.downloadUri) {
+                    throw new Error(client.errmsg || 'Invalid client data');
+                }
+
+                allUpdates = updates.data;
+                clientData = client.data;
+
+                populateVersionSelects();
+                displayClientInfo();
+
+            } catch (error) {
+                clearMessages();
+                showError(`Initialization failed: ${error.message.replace('JSON.parse:', '').trim()}`);
+
+                if (!document.querySelector('#retryButton')) {
+                    const retryButton = document.createElement('button');
+                    retryButton.id = 'retryButton';
+                    retryButton.textContent = 'Retry';
+                    retryButton.onclick = initialize;
+                    document.getElementById('results').appendChild(retryButton);
+                }
+            }
+        }
+
+        function showTokenWarning(message) {
+            const warningDiv = document.createElement('div');
+            warningDiv.className = 'token-warning';
+            warningDiv.innerHTML = `
+        ⚠️ ${message}<br>
+        <small>Update BEARER_TOKEN in server settings to refresh data</small>
+    `;
+            document.body.prepend(warningDiv);
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'warning';
+            errorDiv.textContent = message;
+            document.getElementById('results').appendChild(errorDiv);
+        }
+
+        function clearMessages() {
+            const results = document.getElementById('results');
+            results.innerHTML = '';
+            results.style.display = 'block';
+        }
+
+        function populateVersionSelects() {
+            const versions = [...new Set(allUpdates.flatMap(u => [u.fromVersion, u.version]))]
+                .sort((a, b) => compareVersions(b, a));
+
+            const baseSelect = document.getElementById('baseVersion');
+            const targetSelect = document.getElementById('targetVersion');
+
+            versions.forEach(v => {
+                baseSelect.appendChild(new Option(v, v));
+                targetSelect.appendChild(new Option(v, v));
+            });
+        }
+
+        async function checkDowngraderCompatibility() {
+            try {
+                const resultsDiv = document.getElementById('downgradeResults');
+                resultsDiv.innerHTML = '<div class="loading">Checking...</div>';
+
+                const response = await fetch('/downgrade-info');
+                const data = await response.json();
+
+                resultsDiv.innerHTML = '';
+
+                // Compatibility status
+                const statusDiv = document.createElement('div');
+                statusDiv.className = `compatibility-status ${data.IsLatestCompatible ? 'compatible' : 'outdated'}`;
+                statusDiv.innerHTML = `
+                    <strong>Downgrader Compatibility:</strong><br>
+                    ${data.IsLatestCompatible ?
+                        '✓ Compatible with latest version' :
+                        `⚠ Requires update (Supports build ${data.SourceClientVersion}, Current: ${data.LatestBuildNumber})`}
+                    <div class="version-info">
+                        Full game version: ${data.LatestGameVersion}
+                    </div>
+`;
+                resultsDiv.appendChild(statusDiv);
+
+                // Mirror links
+                if (data.Mirrors?.length > 0) {
+                    const mirrorHeader = document.createElement('p');
+                    mirrorHeader.innerHTML = '<strong>Available Mirrors:</strong>';
+                    resultsDiv.appendChild(mirrorHeader);
+
+                    data.Mirrors.forEach(mirror => {
+                        const div = document.createElement('div');
+                        div.className = 'mirror-link';
+                        div.innerHTML = `
+                    <a class="download-link" href="${mirror.Link}" target="_blank">
+                        ${mirror.Link.split('/').pop()}
+                    </a>
+                    <p>File Hash: <span class="hash-display">${mirror.Hash}</span></p>
+                `;
+                        resultsDiv.appendChild(div);
+                    });
+                } else {
+                    resultsDiv.innerHTML += '<div class="warning">No downgrade patchers available</div>';
+                }
+
+            } catch (error) {
+                showError(`Failed to check downgrader: ${error.message}`);
+            }
+        }
+
+        function displayClientInfo() {
+            document.getElementById('clientSection').style.display = 'block';
+            document.getElementById('clientInfo').innerHTML = `
+                <div class="client-info">
+                    <p><strong>Latest Client:</strong> ${clientData.version}</p>
+                    <p>File Hash: <span class="hash-display">${clientData.hash}</span></p>
+                    <p>Download: <a class="download-link" href="${cdnBaseUrl}${clientData.downloadUri}" target="_blank">
+                        ${clientData.downloadUri.split('/').pop()}
+                    </a></p>
+                    <p class="size-info">Required space: ${formatBytes(clientData.requiredFreeSpace)}</p>
+                </div>
+            `;
+        }
+
+        function calculateUpdatePath() {
+            clearMessages();
+            const base = document.getElementById('baseVersion').value;
+            const target = document.getElementById('targetVersion').value;
+
+            try {
+                if (!base || !target) throw new Error('Select both versions');
+                if (base === target) throw new Error('Versions must differ');
+
+                displayResults(findUpdatePath(base, target));
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function findUpdatePath(from, to) {
+            const path = [];
+            let current = from;
+
+            while (current !== to) {
+                const update = allUpdates.find(u => u.fromVersion === current);
+                if (!update) throw new Error(`No path from ${current} to ${to}`);
+                if (compareVersions(update.version, to) > 0) throw new Error(`Can't downgrade`);
+                path.push(update);
+                current = update.version;
+            }
+
+            return path;
+        }
+
+        function displayResults(updates) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<h3>Required Updates:</h3>';
+
+            updates.forEach((update, index) => {
+                const div = document.createElement('div');
+                div.className = 'update-step';
+                div.innerHTML = `
+                    <p><strong>Step ${index + 1}:</strong> ${update.fromVersion} → ${update.version}</p>
+                    <p>File Hash: <span class="hash-display">${update.hash}</p>
+                    <p>Download: <a class="download-link" href="${cdnBaseUrl}${update.downloadUri}" target="_blank">
+                        ${update.downloadUri.split('/').pop()}
+                    </a></p>
+                `;
+                resultsDiv.appendChild(div);
+            });
+        }
+
+        // Utilities
+        function compareVersions(a, b) {
+            const aParts = a.split('.').map(Number);
+            const bParts = b.split('.').map(Number);
+            for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+                const diff = (aParts[i] || 0) - (bParts[i] || 0);
+                if (diff !== 0) return diff;
+            }
+            return 0;
+        }
+
+        function formatBytes(bytes) {
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let size = bytes, i = 0;
+            while (size >= 1024 && i < units.length - 1) {
+                size /= 1024;
+                i++;
+            }
+            return `${size.toFixed(2)} ${units[i]}`;
+        }
+
+        function showError(message) {
+            const div = document.createElement('div');
+            div.className = 'warning';
+            div.textContent = message;
+            document.getElementById('results').appendChild(div);
+            document.getElementById('results').style.display = 'block';
+        }
+
+        function clearMessages() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        window.addEventListener('load', initialize);
+    </script>
+</body>
+
+</html>
