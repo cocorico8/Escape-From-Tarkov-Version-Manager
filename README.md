@@ -1,6 +1,6 @@
 # EFT Version Manager
 
-# My EFT account got banned PERMENENTLY for, I guess, doing reverse engineering on their launcher or because I got flagged doing test on authentication. I won't be able to maintain the project from now on.
+# The project is on hold, I don't have time to maintain the project for now.
 
 A web-based version management utility for Escape from Tarkov, providing version tracking, update paths, and downgrade capabilities.
 
