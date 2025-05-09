@@ -1,6 +1,6 @@
 # EFT Version Manager
 
-# The project is on hold, I don't have time to maintain the project for now.
+# Archiving this project because I'm cooking something better.
 
 A web-based version management utility for Escape from Tarkov, providing version tracking, update paths, and downgrade capabilities.
 
